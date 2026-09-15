@@ -6,6 +6,7 @@ import com.solutis.ticketservice.dto.TicketResponse;
 import com.solutis.ticketservice.dto.UpdateTicketRequest;
 import com.solutis.ticketservice.entity.Status;
 import com.solutis.ticketservice.entity.Ticket;
+import com.solutis.ticketservice.event.TicketEventPublisher;
 import com.solutis.ticketservice.exception.TicketNotFoundException;
 import com.solutis.ticketservice.exception.UserServiceException;
 import com.solutis.ticketservice.repository.TicketRepository;
@@ -25,6 +26,7 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final UserServiceClient userServiceClient;
+    private final TicketEventPublisher ticketEventPublisher;
 
     @Transactional
     public TicketResponse create(CreateTicketRequest request) {
@@ -53,9 +55,11 @@ public class TicketService {
                 .status(Status.OPEN)
                 .build();
 
-        return TicketResponse.fromEntity(
-                ticketRepository.save(ticket)
-        );
+        Ticket savedTicket = ticketRepository.save(ticket);
+
+        ticketEventPublisher.publishCreated(savedTicket);
+
+        return TicketResponse.fromEntity(savedTicket);
     }
     @Transactional(readOnly = true)
     public TicketResponse findById(UUID id) {

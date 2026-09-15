@@ -32,9 +32,8 @@ public class GlobalExceptionHandler {
             UserServiceException exception,
             HttpServletRequest request
     ) {
-
         return buildResponse(
-                HttpStatus.BAD_REQUEST,
+                HttpStatus.NOT_FOUND,
                 exception.getMessage(),
                 request.getRequestURI()
         );

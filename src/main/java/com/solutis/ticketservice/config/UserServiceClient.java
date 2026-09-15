@@ -3,6 +3,7 @@ package com.solutis.ticketservice.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import com.solutis.ticketservice.exception.UserServiceException;
 
 import java.util.UUID;
 
@@ -26,6 +27,14 @@ public class UserServiceClient {
                 .get()
                 .uri("/users/{id}", userId)
                 .retrieve()
+                .onStatus(
+                        status -> status.value() == 404,
+                        (request, response) -> {
+                            throw new UserServiceException(
+                                    "Usuário não encontrado: " + userId
+                            );
+                        }
+                )
                 .body(UserResponse.class);
     }
 
