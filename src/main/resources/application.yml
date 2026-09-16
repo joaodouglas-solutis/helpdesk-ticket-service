@@ -28,3 +28,7 @@ server:
 services:
   user-service:
     url: ${USER_SERVICE_URL:http://localhost:8081}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:helpdesk-secret-key-2026-very-secret}

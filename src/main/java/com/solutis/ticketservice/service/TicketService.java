@@ -16,6 +16,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.solutis.ticketservice.config.UserServiceClient;
+import org.springframework.security.core.Authentication;
+
+import org.springframework.web.bind.annotation.PathVariable;import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,15 +31,35 @@ public class TicketService {
     private final UserServiceClient userServiceClient;
     private final TicketEventPublisher ticketEventPublisher;
 
+
     @Transactional
-    public TicketResponse create(CreateTicketRequest request) {
+    public TicketResponse create(
+            CreateTicketRequest request,
+            Authentication authentication
+    ) {
+
+        String role = authentication.getAuthorities()
+                .stream()
+                .findFirst()
+                .map(Object::toString)
+                .orElse("");
+
+        UUID authenticatedUserId = UUID.fromString(
+                authentication.getName()
+        );
+
+        UUID customerId = request.customerId();
+
+        if ("ROLE_CLIENT".equals(role)) {
+            customerId = authenticatedUserId;
+        }
 
         UserServiceClient.UserResponse customer =
-                userServiceClient.findUser(request.customerId());
+                userServiceClient.findUser(customerId);
 
         if (!customer.active()) {
             throw new UserServiceException(
-                    "Cliente está inativo: " + request.customerId()
+                    "Cliente está inativo: " + customerId
             );
         }
 
@@ -51,7 +74,7 @@ public class TicketService {
                 .description(request.description())
                 .category(request.category())
                 .priority(request.priority())
-                .customerId(request.customerId())
+                .customerId(customerId)
                 .status(Status.OPEN)
                 .build();
 
@@ -61,10 +84,33 @@ public class TicketService {
 
         return TicketResponse.fromEntity(savedTicket);
     }
+
     @Transactional(readOnly = true)
-    public TicketResponse findById(UUID id) {
+    public TicketResponse findById(
+            UUID id,
+            Authentication authentication
+    ) {
 
         Ticket ticket = findTicket(id);
+
+        String role = authentication.getAuthorities()
+                .stream()
+                .findFirst()
+                .map(Object::toString)
+                .orElse("");
+
+        if ("ROLE_CLIENT".equals(role)) {
+
+            UUID authenticatedUserId = UUID.fromString(
+                    authentication.getName()
+            );
+
+            if (!ticket.getCustomerId().equals(authenticatedUserId)) {
+                throw new AccessDeniedException(
+                        "Você não possui permissão para acessar este chamado"
+                );
+            }
+        }
 
         return TicketResponse.fromEntity(ticket);
     }
@@ -75,8 +121,19 @@ public class TicketService {
             Status status,
             com.solutis.ticketservice.entity.Priority priority,
             com.solutis.ticketservice.entity.Category category,
-            UUID customerId
+            UUID customerId,
+            Authentication authentication
     ) {
+
+        String role = authentication.getAuthorities()
+                .stream()
+                .findFirst()
+                .map(Object::toString)
+                .orElse("");
+
+        if ("ROLE_CLIENT".equals(role)) {
+            customerId = UUID.fromString(authentication.getName());
+        }
 
         Specification<Ticket> specification = Specification.allOf(
                 TicketSpecifications.titleOrDescriptionContains(search),
@@ -91,7 +148,6 @@ public class TicketService {
                 .map(TicketResponse::fromEntity)
                 .toList();
     }
-
     @Transactional
     public TicketResponse update(
             UUID id,

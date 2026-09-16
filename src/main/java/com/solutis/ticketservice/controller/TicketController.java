@@ -11,7 +11,9 @@ import com.solutis.ticketservice.service.TicketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
 
 import java.net.URI;
 import java.util.List;
@@ -24,25 +26,29 @@ public class TicketController {
 
     private final TicketService ticketService;
 
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     @PostMapping
     public ResponseEntity<TicketResponse> create(
-            @Valid @RequestBody CreateTicketRequest request
+            @Valid @RequestBody CreateTicketRequest request,
+            Authentication authentication
     ) {
 
-        TicketResponse response = ticketService.create(request);
+        TicketResponse response = ticketService.create(request, authentication);
 
         return ResponseEntity
                 .created(URI.create("/tickets/" + response.id()))
                 .body(response);
     }
 
+    @PreAuthorize("hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')")
     @GetMapping
     public ResponseEntity<List<TicketResponse>> findAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Status status,
             @RequestParam(required = false) Priority priority,
             @RequestParam(required = false) Category category,
-            @RequestParam(required = false) UUID customerId
+            @RequestParam(required = false) UUID customerId,
+            Authentication authentication
     ) {
 
         return ResponseEntity.ok(
@@ -51,21 +57,24 @@ public class TicketController {
                         status,
                         priority,
                         category,
-                        customerId
+                        customerId,
+                        authentication
                 )
         );
     }
 
+    @PreAuthorize("hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<TicketResponse> findById(
-            @PathVariable UUID id
+            @PathVariable UUID id,
+            Authentication authentication
     ) {
 
         return ResponseEntity.ok(
-                ticketService.findById(id)
+                ticketService.findById(id, authentication)
         );
     }
-
+    @PreAuthorize("hasAnyRole('TECHNICIAN', 'ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<TicketResponse> update(
             @PathVariable UUID id,
@@ -77,6 +86,7 @@ public class TicketController {
         );
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}/assign")
     public ResponseEntity<TicketResponse> assignTechnician(
             @PathVariable UUID id,
@@ -88,6 +98,7 @@ public class TicketController {
         );
     }
 
+    @PreAuthorize("hasAnyRole('TECHNICIAN', 'ADMIN')")
     @PatchMapping("/{id}/close")
     public ResponseEntity<Void> close(
             @PathVariable UUID id
@@ -98,6 +109,7 @@ public class TicketController {
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable UUID id
