@@ -49,6 +49,10 @@ public class Ticket {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean active = true;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

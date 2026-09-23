@@ -31,15 +31,33 @@ public class SecurityConfig {
 
         return http
                 .csrf(csrf -> csrf.disable())
+
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health").permitAll()
-                        .anyRequest().authenticated()
+                        // Swagger / OpenAPI
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+                        )
+                        .permitAll()
+
+                        // Health check
+                        .requestMatchers("/actuator/health")
+                        .permitAll()
+
+                        // Demais endpoints exigem autenticação
+                        .anyRequest()
+                        .authenticated()
                 )
+
                 .oauth2ResourceServer(oauth2 ->
                         oauth2.jwt(jwt -> jwt
-                                .jwtAuthenticationConverter(jwtAuthenticationConverter)
+                                .jwtAuthenticationConverter(
+                                        jwtAuthenticationConverter
+                                )
                         )
                 )
+
                 .build();
     }
 
@@ -55,7 +73,9 @@ public class SecurityConfig {
         JwtAuthenticationConverter converter =
                 new JwtAuthenticationConverter();
 
-        converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        converter.setJwtGrantedAuthoritiesConverter(
+                authoritiesConverter
+        );
 
         return converter;
     }

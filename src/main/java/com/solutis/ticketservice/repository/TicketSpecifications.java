@@ -13,6 +13,11 @@ public final class TicketSpecifications {
     private TicketSpecifications() {
     }
 
+    public static Specification<Ticket> isActive() {
+        return (root, query, cb) ->
+                cb.isTrue(root.get("active"));
+    }
+
     public static Specification<Ticket> hasStatus(Status status) {
         return (root, query, cb) ->
                 status == null
@@ -51,8 +56,14 @@ public final class TicketSpecifications {
             String value = "%" + search.toLowerCase() + "%";
 
             return cb.or(
-                    cb.like(cb.lower(root.get("title")), value),
-                    cb.like(cb.lower(root.get("description")), value)
+                    cb.like(
+                            cb.lower(root.get("title")),
+                            value
+                    ),
+                    cb.like(
+                            cb.lower(root.get("description")),
+                            value
+                    )
             );
         };
     }

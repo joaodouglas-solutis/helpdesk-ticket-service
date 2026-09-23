@@ -1,9 +1,12 @@
 package com.solutis.ticketservice.service;
 
+import com.solutis.ticketservice.config.UserServiceClient;
 import com.solutis.ticketservice.dto.AssignTechnicianRequest;
 import com.solutis.ticketservice.dto.CreateTicketRequest;
 import com.solutis.ticketservice.dto.TicketResponse;
 import com.solutis.ticketservice.dto.UpdateTicketRequest;
+import com.solutis.ticketservice.entity.Category;
+import com.solutis.ticketservice.entity.Priority;
 import com.solutis.ticketservice.entity.Status;
 import com.solutis.ticketservice.entity.Ticket;
 import com.solutis.ticketservice.event.TicketEventPublisher;
@@ -13,12 +16,10 @@ import com.solutis.ticketservice.repository.TicketRepository;
 import com.solutis.ticketservice.repository.TicketSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.solutis.ticketservice.config.UserServiceClient;
-import org.springframework.security.core.Authentication;
-
-import org.springframework.web.bind.annotation.PathVariable;import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.UUID;
@@ -30,7 +31,6 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final UserServiceClient userServiceClient;
     private final TicketEventPublisher ticketEventPublisher;
-
 
     @Transactional
     public TicketResponse create(
@@ -44,9 +44,8 @@ public class TicketService {
                 .map(Object::toString)
                 .orElse("");
 
-        UUID authenticatedUserId = UUID.fromString(
-                authentication.getName()
-        );
+        UUID authenticatedUserId =
+                UUID.fromString(authentication.getName());
 
         UUID customerId = request.customerId();
 
@@ -78,11 +77,16 @@ public class TicketService {
                 .status(Status.OPEN)
                 .build();
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
 
-        ticketEventPublisher.publishCreated(savedTicket);
+        ticketEventPublisher.publishCreated(
+                savedTicket
+        );
 
-        return TicketResponse.fromEntity(savedTicket);
+        return TicketResponse.fromEntity(
+                savedTicket
+        );
     }
 
     @Transactional(readOnly = true)
@@ -101,11 +105,14 @@ public class TicketService {
 
         if ("ROLE_CLIENT".equals(role)) {
 
-            UUID authenticatedUserId = UUID.fromString(
-                    authentication.getName()
-            );
+            UUID authenticatedUserId =
+                    UUID.fromString(
+                            authentication.getName()
+                    );
 
-            if (!ticket.getCustomerId().equals(authenticatedUserId)) {
+            if (!ticket.getCustomerId()
+                    .equals(authenticatedUserId)) {
+
                 throw new AccessDeniedException(
                         "Você não possui permissão para acessar este chamado"
                 );
@@ -119,8 +126,8 @@ public class TicketService {
     public List<TicketResponse> findAll(
             String search,
             Status status,
-            com.solutis.ticketservice.entity.Priority priority,
-            com.solutis.ticketservice.entity.Category category,
+            Priority priority,
+            Category category,
             UUID customerId,
             Authentication authentication
     ) {
@@ -132,22 +139,41 @@ public class TicketService {
                 .orElse("");
 
         if ("ROLE_CLIENT".equals(role)) {
-            customerId = UUID.fromString(authentication.getName());
+            customerId =
+                    UUID.fromString(
+                            authentication.getName()
+                    );
         }
 
-        Specification<Ticket> specification = Specification.allOf(
-                TicketSpecifications.titleOrDescriptionContains(search),
-                TicketSpecifications.hasStatus(status),
-                TicketSpecifications.hasPriority(priority),
-                TicketSpecifications.hasCategory(category),
-                TicketSpecifications.belongsToCustomer(customerId)
-        );
+        Specification<Ticket> specification =
+                Specification.allOf(
+                        TicketSpecifications.isActive(),
+                        TicketSpecifications
+                                .titleOrDescriptionContains(
+                                        search
+                                ),
+                        TicketSpecifications.hasStatus(
+                                status
+                        ),
+                        TicketSpecifications.hasPriority(
+                                priority
+                        ),
+                        TicketSpecifications.hasCategory(
+                                category
+                        ),
+                        TicketSpecifications
+                                .belongsToCustomer(
+                                        customerId
+                                )
+                );
 
-        return ticketRepository.findAll(specification)
+        return ticketRepository
+                .findAll(specification)
                 .stream()
                 .map(TicketResponse::fromEntity)
                 .toList();
     }
+
     @Transactional
     public TicketResponse update(
             UUID id,
@@ -156,13 +182,43 @@ public class TicketService {
 
         Ticket ticket = findTicket(id);
 
-        ticket.setDescription(request.description());
-        ticket.setCategory(request.category());
-        ticket.setPriority(request.priority());
-        ticket.setStatus(request.status());
+        Status previousStatus =
+                ticket.getStatus();
+
+        ticket.setDescription(
+                request.description()
+        );
+
+        ticket.setCategory(
+                request.category()
+        );
+
+        ticket.setPriority(
+                request.priority()
+        );
+
+        ticket.setStatus(
+                request.status()
+        );
+
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        if (previousStatus !=
+                savedTicket.getStatus()) {
+
+            ticketEventPublisher
+                    .publishStatusChanged(
+                            savedTicket,
+                            previousStatus.name(),
+                            savedTicket
+                                    .getStatus()
+                                    .name()
+                    );
+        }
 
         return TicketResponse.fromEntity(
-                ticketRepository.save(ticket)
+                savedTicket
         );
     }
 
@@ -174,25 +230,104 @@ public class TicketService {
 
         Ticket ticket = findTicket(id);
 
-        UserServiceClient.UserResponse technician =
-                userServiceClient.findUser(request.technicianId());
+        UUID currentTechnicianId =
+                ticket.getTechnicianId();
 
-        if (!technician.active()) {
+        if (request.technicianId()
+                .equals(currentTechnicianId)) {
+
             throw new UserServiceException(
-                    "Técnico está inativo: " + request.technicianId()
+                    "Este técnico já está atribuído a este chamado"
             );
         }
 
-        if (!"TECHNICIAN".equals(technician.role())) {
+        UserServiceClient.UserResponse technician =
+                userServiceClient.findUser(
+                        request.technicianId()
+                );
+
+        if (!technician.active()) {
+            throw new UserServiceException(
+                    "Técnico está inativo: " +
+                            request.technicianId()
+            );
+        }
+
+        if (!"TECHNICIAN".equals(
+                technician.role()
+        )) {
             throw new UserServiceException(
                     "Usuário informado não possui o perfil TECHNICIAN"
             );
         }
 
-        ticket.setTechnicianId(request.technicianId());
+        ticket.setTechnicianId(
+                request.technicianId()
+        );
+
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        ticketEventPublisher.publishAssigned(
+                savedTicket
+        );
 
         return TicketResponse.fromEntity(
-                ticketRepository.save(ticket)
+                savedTicket
+        );
+    }
+
+    @Transactional
+    public TicketResponse claim(
+            UUID id,
+            Authentication authentication
+    ) {
+
+        Ticket ticket = findTicket(id);
+
+        if (ticket.getTechnicianId() != null) {
+            throw new UserServiceException(
+                    "Este chamado já possui um técnico atribuído"
+            );
+        }
+
+        UUID technicianId =
+                UUID.fromString(
+                        authentication.getName()
+                );
+
+        UserServiceClient.UserResponse technician =
+                userServiceClient.findUser(
+                        technicianId
+                );
+
+        if (!technician.active()) {
+            throw new UserServiceException(
+                    "Seu usuário está inativo"
+            );
+        }
+
+        if (!"TECHNICIAN".equals(
+                technician.role()
+        )) {
+            throw new UserServiceException(
+                    "Apenas usuários TECHNICIAN podem assumir chamados"
+            );
+        }
+
+        ticket.setTechnicianId(
+                technicianId
+        );
+
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        ticketEventPublisher.publishAssigned(
+                savedTicket
+        );
+
+        return TicketResponse.fromEntity(
+                savedTicket
         );
     }
 
@@ -201,9 +336,23 @@ public class TicketService {
 
         Ticket ticket = findTicket(id);
 
+        Status previousStatus =
+                ticket.getStatus();
+
         ticket.setStatus(Status.CLOSED);
 
-        ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        if (previousStatus != Status.CLOSED) {
+
+            ticketEventPublisher
+                    .publishStatusChanged(
+                            savedTicket,
+                            previousStatus.name(),
+                            Status.CLOSED.name()
+                    );
+        }
     }
 
     @Transactional
@@ -211,15 +360,20 @@ public class TicketService {
 
         Ticket ticket = findTicket(id);
 
-        ticketRepository.delete(ticket);
+        ticket.setActive(false);
+
+        ticketRepository.save(ticket);
     }
 
     private Ticket findTicket(UUID id) {
 
-        return ticketRepository.findById(id)
+        return ticketRepository
+                .findById(id)
+                .filter(Ticket::isActive)
                 .orElseThrow(() ->
                         new TicketNotFoundException(
-                                "Chamado não encontrado: " + id
+                                "Chamado não encontrado: " +
+                                        id
                         )
                 );
     }

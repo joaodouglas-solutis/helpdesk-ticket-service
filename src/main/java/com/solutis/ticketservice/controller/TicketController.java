@@ -26,28 +26,51 @@ public class TicketController {
 
     private final TicketService ticketService;
 
-    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @PreAuthorize(
+            "hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')"
+    )
     @PostMapping
     public ResponseEntity<TicketResponse> create(
             @Valid @RequestBody CreateTicketRequest request,
             Authentication authentication
     ) {
 
-        TicketResponse response = ticketService.create(request, authentication);
+        TicketResponse response =
+                ticketService.create(
+                        request,
+                        authentication
+                );
 
         return ResponseEntity
-                .created(URI.create("/tickets/" + response.id()))
+                .created(
+                        URI.create(
+                                "/tickets/" +
+                                        response.id()
+                        )
+                )
                 .body(response);
     }
 
-    @PreAuthorize("hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')")
+    @PreAuthorize(
+            "hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')"
+    )
     @GetMapping
     public ResponseEntity<List<TicketResponse>> findAll(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) Status status,
-            @RequestParam(required = false) Priority priority,
-            @RequestParam(required = false) Category category,
-            @RequestParam(required = false) UUID customerId,
+            @RequestParam(required = false)
+            String search,
+
+            @RequestParam(required = false)
+            Status status,
+
+            @RequestParam(required = false)
+            Priority priority,
+
+            @RequestParam(required = false)
+            Category category,
+
+            @RequestParam(required = false)
+            UUID customerId,
+
             Authentication authentication
     ) {
 
@@ -63,7 +86,9 @@ public class TicketController {
         );
     }
 
-    @PreAuthorize("hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')")
+    @PreAuthorize(
+            "hasAnyRole('CLIENT', 'TECHNICIAN', 'ADMIN')"
+    )
     @GetMapping("/{id}")
     public ResponseEntity<TicketResponse> findById(
             @PathVariable UUID id,
@@ -71,10 +96,16 @@ public class TicketController {
     ) {
 
         return ResponseEntity.ok(
-                ticketService.findById(id, authentication)
+                ticketService.findById(
+                        id,
+                        authentication
+                )
         );
     }
-    @PreAuthorize("hasAnyRole('TECHNICIAN', 'ADMIN')")
+
+    @PreAuthorize(
+            "hasAnyRole('TECHNICIAN', 'ADMIN')"
+    )
     @PutMapping("/{id}")
     public ResponseEntity<TicketResponse> update(
             @PathVariable UUID id,
@@ -82,7 +113,10 @@ public class TicketController {
     ) {
 
         return ResponseEntity.ok(
-                ticketService.update(id, request)
+                ticketService.update(
+                        id,
+                        request
+                )
         );
     }
 
@@ -94,11 +128,31 @@ public class TicketController {
     ) {
 
         return ResponseEntity.ok(
-                ticketService.assignTechnician(id, request)
+                ticketService.assignTechnician(
+                        id,
+                        request
+                )
         );
     }
 
-    @PreAuthorize("hasAnyRole('TECHNICIAN', 'ADMIN')")
+    @PreAuthorize("hasRole('TECHNICIAN')")
+    @PatchMapping("/{id}/claim")
+    public ResponseEntity<TicketResponse> claim(
+            @PathVariable UUID id,
+            Authentication authentication
+    ) {
+
+        return ResponseEntity.ok(
+                ticketService.claim(
+                        id,
+                        authentication
+                )
+        );
+    }
+
+    @PreAuthorize(
+            "hasAnyRole('TECHNICIAN', 'ADMIN')"
+    )
     @PatchMapping("/{id}/close")
     public ResponseEntity<Void> close(
             @PathVariable UUID id
